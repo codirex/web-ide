@@ -1,0 +1,83 @@
+# Builds the runtime bootstrap archive for org.codirex.webide from the Termux package sources.
+#
+# Run it manually from the Actions tab. The result is an artifact named "bootstrap" that contains
+# bootstrap-<arch>.zip. Download it, unzip the artifact, and install the inner zip from the app.
+#
+# Not yet run. The first run decides whether the build fits GitHub's six-hour job limit.
+name: Build bootstrap
+
+on:
+  workflow_dispatch:
+    inputs:
+      termux_packages_ref:
+        description: termux-packages branch, tag or commit
+        default: master
+      architectures:
+        description: Architectures, comma separated (aarch64, arm, x86_64, i686)
+        default: aarch64
+      extra_packages:
+        description: Extra packages added to the base bootstrap, comma separated
+        default: nodejs,git
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Free disk space
+        shell: bash
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          df -h /
+
+      - name: Check out termux-packages
+        uses: actions/checkout@v4
+        with:
+          repository: termux/termux-packages
+          ref: ${{ inputs.termux_packages_ref }}
+          path: termux-packages
+
+      - name: Set the package name
+        working-directory: termux-packages
+        shell: bash
+        run: |
+          sed -i 's/^TERMUX_APP_PACKAGE="com\.termux"/TERMUX_APP_PACKAGE="org.codirex.webide"/' scripts/properties.sh
+          grep -n '^TERMUX_APP_PACKAGE=' scripts/properties.sh
+          grep -q '^TERMUX_APP_PACKAGE="org.codirex.webide"' scripts/properties.sh
+
+      - name: Build bootstrap
+        working-directory: termux-packages
+        shell: bash
+        env:
+          ARCHITECTURES: ${{ inputs.architectures }}
+          EXTRA_PACKAGES: ${{ inputs.extra_packages }}
+        run: |
+          ./scripts/run-docker.sh ./clean.sh
+          ./scripts/run-docker.sh ./scripts/build-bootstraps.sh \
+            --architectures "$ARCHITECTURES" \
+            --add "$EXTRA_PACKAGES" 2>&1 | tee build.log
+
+      - name: Look for leftover com.termux paths
+        if: always()
+        working-directory: termux-packages
+        shell: bash
+        run: |
+          for zip in bootstrap-*.zip; do
+            [ -e "$zip" ] || continue
+            dir="$(mktemp -d)"
+            unzip -q "$zip" -d "$dir"
+            echo "== $zip: files that still mention /data/data/com.termux"
+            grep -rIl "/data/data/com.termux" "$dir" | head -50 || true
+            grep -rl "/data/data/com.termux" "$dir" | wc -l
+          done
+
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap
+          path: |
+            termux-packages/bootstrap-*.zip
+            termux-packages/build.log
+          if-no-files-found: warn

@@ -1,0 +1,20 @@
+<resources>
+    <string name="app_name">WebIDE</string>
+    <string name="environment_title">Environment</string>
+    <string name="exec_test_title">Run files from app storage</string>
+    <string name="exec_test_description">Writes a small script into the app\'s private storage and runs it. The result shows whether this device lets the app execute its own files.</string>
+    <string name="exec_test_run">Run test</string>
+    <string name="exec_test_running">Running\u2026</string>
+
+    <string name="runtime_title">Runtime</string>
+    <string name="runtime_not_installed">Runtime not installed. Install a bootstrap archive to continue.</string>
+    <string name="runtime_installed">Runtime installed.</string>
+    <string name="install_from_file">Install from file</string>
+    <string name="install_bundled">Install bundled archive</string>
+    <string name="remove_runtime">Remove</string>
+    <string name="command_hint">Shell command</string>
+    <string name="default_command">node -v &amp;&amp; npm -v</string>
+    <string name="run_command">Run command</string>
+    <string name="reading_file">Reading file\u2026</string>
+    <string name="removing_runtime">Removing\u2026</string>
+</resources>

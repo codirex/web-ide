@@ -1,0 +1,18 @@
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build/
+**/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.jks
+*.keystore
+
+# Bootstrap archives are built by CI and not committed
+/app/src/main/assets/bootstrap/*.zip
+/bootstrap-*.zip
