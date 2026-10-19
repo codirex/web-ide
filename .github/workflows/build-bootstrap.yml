@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       termux_packages_ref:
-        description: termux-packages branch, tag or commit
+        description: termux-packages branch, tag or commit (its main branch is called master)
         default: master
       architectures:
         description: Architectures, comma separated (aarch64, arm, x86_64, i686)
@@ -42,9 +42,16 @@ jobs:
         working-directory: termux-packages
         shell: bash
         run: |
-          sed -i 's/^TERMUX_APP_PACKAGE="com\.termux"/TERMUX_APP_PACKAGE="org.codirex.webide"/' scripts/properties.sh
-          grep -n '^TERMUX_APP_PACKAGE=' scripts/properties.sh
-          grep -q '^TERMUX_APP_PACKAGE="org.codirex.webide"' scripts/properties.sh
+          echo "Lines in scripts/properties.sh that mention com.termux:"
+          grep -n 'com\.termux' scripts/properties.sh || true
+          # Older checkouts call the variable TERMUX_APP_PACKAGE, newer ones TERMUX_APP__PACKAGE_NAME.
+          sed -i -E 's/^(TERMUX_APP_PACKAGE|TERMUX_APP__PACKAGE_NAME)="com\.termux"/\1="org.codirex.webide"/' scripts/properties.sh
+          echo "After the change:"
+          grep -nE '^(TERMUX_APP_PACKAGE|TERMUX_APP__PACKAGE_NAME)=' scripts/properties.sh || true
+          if ! grep -qE '^(TERMUX_APP_PACKAGE|TERMUX_APP__PACKAGE_NAME)="org\.codirex\.webide"' scripts/properties.sh; then
+            echo "::error::Could not set the package name. See the lines printed above."
+            exit 1
+          fi
 
       - name: Build bootstrap
         working-directory: termux-packages
