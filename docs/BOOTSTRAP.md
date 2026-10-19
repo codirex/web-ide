@@ -6,21 +6,19 @@ into `/data/data/org.codirex.webide/files/usr`. Prebuilt Termux packages contain
 
 ## Build
 
-The build runs in Docker on Linux x86_64 and compiles the packages from source, including Node.js.
-It does not fit on a phone.
+The build runs in Docker on Linux x86_64 and compiles every package from source. It takes about
+3.5 hours (Node.js alone about 2.5) and does not fit on a phone.
 
-1. Push this project to GitHub.
+1. Push this project to GitHub (the workflow files must be on the default branch).
 2. Open **Actions → Build bootstrap → Run workflow**. Defaults: architecture `aarch64`,
-   extra packages `nodejs,git`.
-3. When the run finishes, download the artifact `bootstrap`. GitHub wraps it in a zip, so unzip it
-   once to get `bootstrap-aarch64.zip`.
-4. If the run fails, download `build.log` from the same artifact and send it to me.
-
-Things to check on the first run (not verified yet):
-
-- Whether the job finishes within six hours.
-- Whether `--add nodejs,git` is the right syntax for the script; `build-bootstraps.sh --help` shows it.
-- The step "Look for leftover com.termux paths" lists files that still mention the old path.
+   extra packages `nodejs,git`, termux-packages ref `master`.
+3. When the run finishes, download the artifacts. GitHub wraps each in a zip, so unzip once.
+   - `bootstrap-full`: `bootstrap-aarch64-full.zip`, as the Termux script produced it. It is
+     uploaded before anything else can go wrong.
+   - `bootstrap`: `bootstrap-aarch64.zip`, the same archive without build-time tools (python,
+     doxygen, docbook, ...), plus `build.log` and `prune.log`.
+4. If the small archive is missing or wrong, run **Actions → Prune bootstrap** with the run id of
+   the build. It makes the small archive from `bootstrap-full` in a few minutes.
 
 ## Install
 

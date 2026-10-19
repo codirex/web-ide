@@ -1,9 +1,11 @@
 # Builds the runtime bootstrap archive for org.codirex.webide from the Termux package sources.
 #
-# Run it manually from the Actions tab. The result is an artifact named "bootstrap" that contains
-# bootstrap-<arch>.zip. Download it, unzip the artifact, and install the inner zip from the app.
+# Run it manually from the Actions tab (takes about 3.5 hours). Artifacts:
+#   bootstrap-full  the archive exactly as the Termux script produced it (uploaded right away)
+#   bootstrap       the smaller archive (only what the app needs) plus the build logs
 #
-# Not yet run. The first run decides whether the build fits GitHub's six-hour job limit.
+# If something goes wrong after the long build, the "Prune bootstrap" workflow can redo the
+# small part from bootstrap-full in a few minutes, without rebuilding.
 name: Build bootstrap
 
 on:
@@ -24,6 +26,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     steps:
+      - name: Check out this project
+        uses: actions/checkout@v4
+        with:
+          path: repo
+
       - name: Free disk space
         shell: bash
         run: |
@@ -52,6 +59,16 @@ jobs:
             echo "::error::Could not set the package name. See the lines printed above."
             exit 1
           fi
+
+      - name: Make the checkout writable for the build container
+        working-directory: termux-packages
+        shell: bash
+        run: |
+          # The container user is not the runner user. Without this, the last step of the
+          # build (moving bootstrap-aarch64.zip into the checkout) fails with "Permission denied".
+          chmod a+rwx .
+          mkdir -p output
+          chmod a+rwx output
 
       - name: Let build-package.sh accept subpackage names
         working-directory: termux-packages
@@ -102,6 +119,58 @@ jobs:
             --architectures "$ARCHITECTURES" \
             --add "$EXTRA_PACKAGES" 2>&1 | tee build.log
 
+      - name: Rescue the archive if it is still inside the container
+        if: always()
+        working-directory: termux-packages
+        shell: bash
+        run: |
+          if ls bootstrap-*.zip >/dev/null 2>&1; then
+            echo "Archive is in the checkout."
+            exit 0
+          fi
+          echo "No archive in the checkout; looking inside the container."
+          docker ps -a --format '{{.Names}}' || true
+          found="$(docker exec termux-package-builder find / -xdev -name 'bootstrap-*.zip' -size +5M 2>/dev/null | head -n 5 || true)"
+          echo "found: $found"
+          for f in $found; do
+            docker cp "termux-package-builder:$f" . || true
+          done
+          ls -lh bootstrap-*.zip || true
+
+      - name: Keep the full archive
+        if: always()
+        working-directory: termux-packages
+        shell: bash
+        run: |
+          for z in bootstrap-*.zip; do
+            [ -e "$z" ] || continue
+            case "$z" in *-full.zip) continue ;; esac
+            mv "$z" "${z%.zip}-full.zip"
+          done
+          ls -lh bootstrap-*.zip || true
+
+      - name: Upload the full archive right away
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap-full
+          path: termux-packages/bootstrap-*-full.zip
+          compression-level: 0
+          if-no-files-found: warn
+
+      - name: Make the smaller archive
+        continue-on-error: true
+        working-directory: termux-packages
+        shell: bash
+        env:
+          EXTRA_PACKAGES: ${{ inputs.extra_packages }}
+        run: |
+          for z in bootstrap-*-full.zip; do
+            [ -e "$z" ] || continue
+            python3 ../repo/tools/prune_bootstrap.py "$z" "${z%-full.zip}.zip" --keep "$EXTRA_PACKAGES" | tee -a prune.log
+          done
+          ls -lh bootstrap-*.zip
+
       - name: Look for leftover com.termux paths
         if: always()
         working-directory: termux-packages
@@ -109,6 +178,7 @@ jobs:
         run: |
           for zip in bootstrap-*.zip; do
             [ -e "$zip" ] || continue
+            case "$zip" in *-full.zip) continue ;; esac
             dir="$(mktemp -d)"
             unzip -q "$zip" -d "$dir"
             echo "== $zip: files that still mention /data/data/com.termux"
@@ -116,12 +186,16 @@ jobs:
             grep -rl "/data/data/com.termux" "$dir" | wc -l
           done
 
-      - name: Upload
+      - name: Upload the smaller archive and logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: bootstrap
           path: |
-            termux-packages/bootstrap-*.zip
+            termux-packages/bootstrap-aarch64.zip
+            termux-packages/bootstrap-arm.zip
+            termux-packages/bootstrap-x86_64.zip
+            termux-packages/bootstrap-i686.zip
             termux-packages/build.log
+            termux-packages/prune.log
           if-no-files-found: warn

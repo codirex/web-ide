@@ -1,0 +1,50 @@
+# Makes the smaller bootstrap archive from the full one produced by an earlier "Build bootstrap"
+# run. Takes a few minutes; no package is rebuilt.
+name: Prune bootstrap
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Run id of a finished "Build bootstrap" run (the number at the end of its URL)
+        required: true
+      extra_packages:
+        description: Extra packages to keep, comma separated
+        default: nodejs,git
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  prune:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out this project
+        uses: actions/checkout@v4
+
+      - name: Download the full archive
+        uses: actions/download-artifact@v4
+        with:
+          name: bootstrap-full
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          path: full
+
+      - name: Prune
+        shell: bash
+        env:
+          EXTRA_PACKAGES: ${{ inputs.extra_packages }}
+        run: |
+          mkdir -p out
+          for z in full/bootstrap-*-full.zip; do
+            name="$(basename "$z")"
+            python3 tools/prune_bootstrap.py "$z" "out/${name%-full.zip}.zip" --keep "$EXTRA_PACKAGES"
+          done
+          ls -lh full out
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap-pruned
+          path: out/*.zip
