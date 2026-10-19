@@ -53,6 +53,43 @@ jobs:
             exit 1
           fi
 
+      - name: Let build-package.sh accept subpackage names
+        working-directory: termux-packages
+        shell: bash
+        run: |
+          # build-bootstraps.sh asks for some packages that are only subpackages of another
+          # package (for example bzip2 is a part of libbz2) and fails on them.
+          # Build the parent package instead. Upstream issue: termux/termux-packages#27093
+          mv build-package.sh build-package.real.sh
+          cat > build-package.sh <<'WRAPPER'
+          #!/usr/bin/env bash
+          set -e
+          here="$(cd "$(dirname "$0")" && pwd)"
+          args=()
+          skip=0
+          for arg in "$@"; do
+            if [ "$skip" = 1 ]; then
+              args+=("$arg")
+              skip=0
+              continue
+            fi
+            case "$arg" in
+              -a|-o) args+=("$arg"); skip=1; continue ;;
+              -*) args+=("$arg"); continue ;;
+            esac
+            if [ ! -f "$here/packages/$arg/build.sh" ]; then
+              parent="$(ls "$here"/packages/*/"$arg".subpackage.sh 2>/dev/null | head -n1 | xargs -r dirname | xargs -r basename)"
+              if [ -n "$parent" ]; then
+                echo "build-package.sh wrapper: '$arg' is a subpackage of '$parent', building '$parent'" >&2
+                arg="$parent"
+              fi
+            fi
+            args+=("$arg")
+          done
+          exec "$here/build-package.real.sh" "${args[@]}"
+          WRAPPER
+          chmod +x build-package.sh
+
       - name: Build bootstrap
         working-directory: termux-packages
         shell: bash
