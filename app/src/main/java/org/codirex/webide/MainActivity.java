@@ -122,7 +122,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void installFromAsset(String assetPath) {
-        runInstall(getString(R.string.reading_file), () -> {
+        runInstall(getString(R.string.reading_file), true, () -> {
             try (InputStream in = getAssets().open(assetPath)) {
                 return installer.install(in, this::postProgress);
             } catch (IOException e) {
@@ -132,7 +132,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void installFromUri(Uri uri) {
-        runInstall(getString(R.string.reading_file), () -> {
+        runInstall(getString(R.string.reading_file), true, () -> {
             try (InputStream in = getContentResolver().openInputStream(uri)) {
                 if (in == null) {
                     return BootstrapInstaller.failed("Cannot open the selected file");
@@ -145,21 +145,29 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void removeRuntime() {
-        runInstall(getString(R.string.removing_runtime), installer::uninstall);
+        runInstall(getString(R.string.removing_runtime), false, installer::uninstall);
     }
 
-    private void runInstall(String label, InstallAction action) {
+    private void runInstall(String label, boolean finishSetup, InstallAction action) {
         setBusy(true);
         binding.runtimeStatus.setText(label);
         executor.execute(() -> {
             BootstrapInstaller.Result result = action.run();
+            String setupReport = "";
+            if (result.success && finishSetup) {
+                postProgress(getString(R.string.finishing_setup));
+                // First login shell: runs the bootstrap's second-stage setup.
+                CommandRunner.Result setup = commandRunner.runLoginShell("echo setup-finished", 300);
+                setupReport = "\n\nSetup: " + setup.describe();
+            }
+            final String message = (result.success ? "Done. " : "Failed. ") + result.message + setupReport;
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) {
                     return;
                 }
                 setBusy(false);
                 refreshReport();
-                binding.runtimeStatus.setText((result.success ? "Done. " : "Failed. ") + result.message);
+                binding.runtimeStatus.setText(message);
             });
         });
     }

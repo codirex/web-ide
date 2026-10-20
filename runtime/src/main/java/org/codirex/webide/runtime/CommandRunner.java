@@ -62,11 +62,25 @@ public final class CommandRunner {
         if (!environment.isInstalled()) {
             return new Result(-1, "", false, false, "The runtime is not installed.");
         }
+        return run(new String[]{environment.shell().getAbsolutePath(), "-c", command}, timeoutSeconds);
+    }
+
+    /**
+     * Runs the command in a bash login shell. A login shell reads the profile scripts, which is
+     * how the one-time second-stage setup of a fresh bootstrap gets executed.
+     */
+    public Result runLoginShell(String command, long timeoutSeconds) {
+        if (!environment.isInstalled() || !environment.bash().exists()) {
+            return new Result(-1, "", false, false, "The runtime is not installed.");
+        }
+        return run(new String[]{environment.bash().getAbsolutePath(), "-l", "-c", command}, timeoutSeconds);
+    }
+
+    private Result run(String[] commandLine, long timeoutSeconds) {
         final StringBuilder output = new StringBuilder();
         final boolean[] truncated = {false};
         try {
-            ProcessBuilder builder = new ProcessBuilder(
-                    environment.shell().getAbsolutePath(), "-c", command);
+            ProcessBuilder builder = new ProcessBuilder(commandLine);
             builder.directory(paths.home);
             builder.environment().clear();
             builder.environment().putAll(environment.build());

@@ -1,5 +1,5 @@
-# Makes the smaller bootstrap archive from the full one produced by an earlier "Build bootstrap"
-# run. Takes a few minutes; no package is rebuilt.
+# Makes the final bootstrap archive from the full one produced by an earlier "Build bootstrap" run:
+# removes build-time packages and adds npm. Takes a few minutes; no package is rebuilt.
 name: Prune bootstrap
 
 on:
@@ -11,6 +11,9 @@ on:
       extra_packages:
         description: Extra packages to keep, comma separated
         default: nodejs,git
+      npm_version:
+        description: npm version or range to add (the Node.js package was built without npm)
+        default: "11"
 
 permissions:
   contents: read
@@ -31,15 +34,28 @@ jobs:
           github-token: ${{ github.token }}
           path: full
 
-      - name: Prune
+      - name: Download npm
+        shell: bash
+        env:
+          NPM_VERSION: ${{ inputs.npm_version }}
+        run: |
+          mkdir -p npm-download
+          cd npm-download
+          npm pack "npm@${NPM_VERSION}" --silent
+          ls -lh
+
+      - name: Prune and add npm
         shell: bash
         env:
           EXTRA_PACKAGES: ${{ inputs.extra_packages }}
         run: |
-          mkdir -p out
+          mkdir -p out work
+          tarball="$(ls npm-download/npm-*.tgz | head -n1)"
           for z in full/bootstrap-*-full.zip; do
             name="$(basename "$z")"
-            python3 tools/prune_bootstrap.py "$z" "out/${name%-full.zip}.zip" --keep "$EXTRA_PACKAGES"
+            small="work/${name%-full.zip}.zip"
+            python3 tools/prune_bootstrap.py "$z" "$small" --keep "$EXTRA_PACKAGES"
+            python3 tools/add_npm.py "$small" "out/${name%-full.zip}.zip" "$tarball"
           done
           ls -lh full out
 

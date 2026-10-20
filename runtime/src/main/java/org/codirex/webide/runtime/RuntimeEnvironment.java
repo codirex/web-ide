@@ -29,6 +29,11 @@ public final class RuntimeEnvironment {
         return new File(paths.bin, "sh");
     }
 
+    /** Bash, used for login shells (they run the one-time second-stage setup of the bootstrap). */
+    public File bash() {
+        return new File(paths.bin, "bash");
+    }
+
     public boolean isInstalled() {
         return shell().exists();
     }
@@ -51,9 +56,13 @@ public final class RuntimeEnvironment {
         }
 
         // Rewrites shebangs such as "#!/usr/bin/env node" to paths inside the prefix.
-        File termuxExec = new File(paths.lib, "libtermux-exec.so");
-        if (termuxExec.exists()) {
-            env.put("LD_PRELOAD", termuxExec.getAbsolutePath());
+        // Current bootstraps ship libtermux-exec-ld-preload.so; older ones libtermux-exec.so.
+        for (String library : new String[]{"libtermux-exec-ld-preload.so", "libtermux-exec.so"}) {
+            File candidate = new File(paths.lib, library);
+            if (candidate.exists()) {
+                env.put("LD_PRELOAD", candidate.getAbsolutePath());
+                break;
+            }
         }
         return env;
     }

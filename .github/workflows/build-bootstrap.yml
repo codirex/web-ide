@@ -275,13 +275,28 @@ jobs:
           compression-level: 0
           if-no-files-found: warn
 
+      - name: Pack the .deb packages
+        if: ${{ always() && !inputs.preflight_only }}
+        continue-on-error: true
+        working-directory: termux-packages
+        shell: bash
+        run: |
+          # Package file names contain ":" which artifact upload rejects, so pack them first.
+          shopt -s nullglob
+          debs=(output/*.deb)
+          echo "${#debs[@]} packages"
+          if [ ${#debs[@]} -gt 0 ]; then
+            tar -cf debs.tar "${debs[@]}"
+            ls -lh debs.tar
+          fi
+
       - name: Upload the .deb packages
         if: ${{ always() && !inputs.preflight_only }}
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: debs
-          path: termux-packages/output/*.deb
+          path: termux-packages/debs.tar
           compression-level: 0
           if-no-files-found: warn
 
@@ -303,9 +318,15 @@ jobs:
         env:
           EXTRA_PACKAGES: ${{ inputs.extra_packages }}
         run: |
+          # The Node.js package is built without npm, so add it from the npm registry.
+          mkdir -p ../npm-download && (cd ../npm-download && npm pack "npm@11" --silent)
+          tarball="$(ls ../npm-download/npm-*.tgz | head -n1)"
+          shopt -s nullglob
           for z in bootstrap-*-full.zip; do
-            [ -e "$z" ] || continue
-            python3 ../repo/tools/prune_bootstrap.py "$z" "${z%-full.zip}.zip" --keep "$EXTRA_PACKAGES" | tee -a prune.log
+            small="${z%-full.zip}.small.zip"
+            python3 ../repo/tools/prune_bootstrap.py "$z" "$small" --keep "$EXTRA_PACKAGES" | tee -a prune.log
+            python3 ../repo/tools/add_npm.py "$small" "${z%-full.zip}.zip" "$tarball" | tee -a prune.log
+            rm -f "$small"
           done
           ls -lh bootstrap-*.zip
 
