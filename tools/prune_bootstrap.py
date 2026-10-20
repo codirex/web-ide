@@ -65,11 +65,21 @@ def rel(path):
     return p.rstrip("/")
 
 
+def rewrite_text(data, old, new):
+    """Replaces a path in text files. Binary files (they contain a NUL byte) are left alone."""
+    if old in data and b"\0" not in data[:8192]:
+        return data.replace(old, new)
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("source")
     ap.add_argument("target")
     ap.add_argument("--keep", default="", help="extra packages to keep, comma separated")
+    ap.add_argument("--old-path", default="/data/data/com.termux",
+                    help="path to replace inside text files that still contain it")
+    ap.add_argument("--new-path", default="/data/data/org.codirex.webide")
     args = ap.parse_args()
 
     roots = [r.strip() for r in (BASE_KEEP + "," + args.keep).split(",") if r.strip()]
@@ -151,6 +161,8 @@ def main():
         new_status = "\n\n".join(packages[p][1] for p in packages if p in keep) + "\n"
 
         removed_files = removed_dirs = 0
+        old_bytes, new_bytes = args.old_path.encode(), args.new_path.encode()
+        rewritten = []
         with zipfile.ZipFile(args.target, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zout:
             for info in zin.infolist():
                 n = info.filename
@@ -172,11 +184,18 @@ def main():
                 if rel(n) in dropped_paths:
                     removed_files += 1
                     continue
-                zout.writestr(info, zin.read(info), compress_type=info.compress_type)
+                data = zin.read(info)
+                changed = rewrite_text(data, old_bytes, new_bytes)
+                if changed is not None:
+                    data = changed
+                    rewritten.append(n)
+                zout.writestr(info, data, compress_type=info.compress_type)
 
     print("packages: kept %d, removed %d" % (len(keep), len(drop)))
     print("files removed: %d, links removed: %d, empty directories removed: %d"
           % (removed_files, dropped_links, removed_dirs))
+    print("text files with the old path rewritten: %d" % len(rewritten))
+    print("rewritten:", " ".join(rewritten))
     print("removed:", " ".join(sorted(drop)))
     if missing:
         print("not in the archive (ignored):", " ".join(sorted(missing)))

@@ -17,9 +17,12 @@ import java.io.File;
  */
 public final class RuntimePaths {
 
+    /** App files directory as written inside the prebuilt packages. */
+    public static final String EXPECTED_FILES =
+            "/data/data/" + WebIdeConstants.APPLICATION_ID + "/files";
+
     /** Absolute prefix path baked into the prebuilt packages. */
-    public static final String EXPECTED_PREFIX =
-            "/data/data/" + WebIdeConstants.APPLICATION_ID + "/files/usr";
+    public static final String EXPECTED_PREFIX = EXPECTED_FILES + "/usr";
 
     public final File filesDir;
     public final File prefix;
@@ -32,8 +35,14 @@ public final class RuntimePaths {
     /** Scratch directory used by diagnostics; never touched by the bootstrap installer. */
     public final File diagnostics;
 
+    private final boolean prebuiltLayout;
+
     public RuntimePaths(Context context) {
-        filesDir = context.getFilesDir();
+        File actual = context.getFilesDir();
+        prebuiltLayout = sameDirectory(new File(EXPECTED_FILES), actual);
+        // Use the path the packages were built for (/data/data/...) whenever it reaches the same
+        // directory as the one Android reports (/data/user/0/...), so tools see consistent paths.
+        filesDir = prebuiltLayout ? new File(EXPECTED_FILES) : actual;
         prefix = new File(filesDir, "usr");
         bin = new File(prefix, "bin");
         lib = new File(prefix, "lib");
@@ -46,20 +55,21 @@ public final class RuntimePaths {
     /**
      * True when this install lives at the path the prebuilt packages expect. False for secondary
      * users and work profiles, where prebuilt packages cannot run.
-     *
-     * <p>Compares the device and inode of both paths instead of comparing path strings, because
+     */
+    public boolean matchesPrebuiltLayout() {
+        return prebuiltLayout;
+    }
+
+    /**
+     * Compares the device and inode of both paths instead of comparing path strings, because
      * {@code /data/data} is a link to {@code /data/user/0} and the app is not always allowed to
      * resolve that link itself.
      */
-    public boolean matchesPrebuiltLayout() {
+    private static boolean sameDirectory(File a, File b) {
         try {
-            File expectedFiles = new File(EXPECTED_PREFIX).getParentFile();
-            if (expectedFiles == null) {
-                return false;
-            }
-            StructStat expected = Os.stat(expectedFiles.getPath());
-            StructStat actual = Os.stat(filesDir.getAbsolutePath());
-            return expected.st_dev == actual.st_dev && expected.st_ino == actual.st_ino;
+            StructStat first = Os.stat(a.getPath());
+            StructStat second = Os.stat(b.getAbsolutePath());
+            return first.st_dev == second.st_dev && first.st_ino == second.st_ino;
         } catch (ErrnoException e) {
             return false;
         }
