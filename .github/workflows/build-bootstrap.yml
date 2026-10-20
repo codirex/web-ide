@@ -2,6 +2,7 @@
 #
 # Run it manually from the Actions tab (takes about 3.5 hours). Artifacts:
 #   bootstrap-full  the archive exactly as the Termux script produced it (uploaded right away)
+#   debs            every package built for org.codirex.webide (raw material for an apt repository)
 #   bootstrap       the smaller archive (only what the app needs) plus the build logs
 #
 # If something goes wrong after the long build, the "Prune bootstrap" workflow can redo the
@@ -146,34 +147,58 @@ jobs:
           WRAPPER
           chmod +x build-package.sh
 
-      - name: Preflight - can the build container write its output?
+      - name: Preflight - can the archive get from the build container to the runner?
         working-directory: termux-packages
         shell: bash
         run: |
-          echo "runner: $(id)"
-          ./scripts/run-docker.sh bash -c '
-            id
-            ls -ld /home/builder/termux-packages /home/builder/termux-packages/output
-            echo test > /tmp/pf.txt
-            if mv -f /tmp/pf.txt /home/builder/termux-packages/output/pf.txt; then
-              echo "PREFLIGHT_OUTPUT_OK"; rm -f /home/builder/termux-packages/output/pf.txt
-            else
-              echo "PREFLIGHT_OUTPUT_FAILED"
-            fi
-            if touch /home/builder/termux-packages/pf-root.txt; then
-              echo "PREFLIGHT_ROOT_OK"; rm -f /home/builder/termux-packages/pf-root.txt
-            else
-              echo "PREFLIGHT_ROOT_FAILED (informational)"
-            fi
-            if mkdir -p /home/builder/rescue && touch /home/builder/rescue/pf; then
-              echo "PREFLIGHT_RESCUE_OK"
-            fi
-          ' 2>&1 | tee preflight.log
-          if ! grep -q PREFLIGHT_OUTPUT_OK preflight.log || ! grep -q PREFLIGHT_RESCUE_OK preflight.log; then
-            echo "::error::The build container cannot write where the archive will be saved. See the lines printed above."
+          {
+            echo "runner: $(id)"
+            ls -ld . output
+            ./scripts/run-docker.sh bash -c '
+              echo "container: $(id)"
+              ls -ld /home/builder/termux-packages /home/builder/termux-packages/output
+              findmnt -T /home/builder/termux-packages || true
+              findmnt -T /home/builder/termux-packages/output || true
+              head -c 30000000 /dev/zero > /tmp/pf-big.bin
+              if mv -f /tmp/pf-big.bin /home/builder/termux-packages/output/pf-big.bin; then echo PF_C_OUTPUT_MV_OK; else echo PF_C_OUTPUT_MV_FAILED; fi
+              if touch /home/builder/termux-packages/pf-root.txt; then echo PF_C_ROOT_OK; else echo PF_C_ROOT_FAILED; fi
+              mkdir -p /home/builder/rescue && echo rescue > /home/builder/rescue/pf-rescue.txt && echo PF_C_RESCUE_OK
+            ' 2>&1
+            echo "--- what the runner sees afterwards"
+            ls -la output pf-root.txt 2>&1 || true
+            docker ps -a --format '{{.Names}}  {{.Status}}' || true
+            if docker cp termux-package-builder:/home/builder/rescue/pf-rescue.txt ./pf-rescue.txt; then echo PF_H_DOCKER_CP_OK; else echo PF_H_DOCKER_CP_FAILED; fi
+            if [ -s output/pf-big.bin ]; then echo PF_H_OUTPUT_VISIBLE; else echo PF_H_OUTPUT_NOT_VISIBLE; fi
+            if [ -e pf-root.txt ]; then echo PF_H_ROOT_VISIBLE; else echo PF_H_ROOT_NOT_VISIBLE; fi
+          } 2>&1 | tee preflight.log
+          rm -f output/pf-big.bin pf-root.txt pf-rescue.txt || true
+          if grep -q PF_C_OUTPUT_MV_OK preflight.log && { grep -q PF_H_OUTPUT_VISIBLE preflight.log || grep -q PF_H_DOCKER_CP_OK preflight.log; }; then
+            echo "Preflight passed: the archive can leave the container."
+          else
+            echo "::error::The archive cannot get out of the build container this way. Send preflight.log (or this step's log)."
             exit 1
           fi
-          echo "Preflight passed."
+
+      - name: Preflight - simulate the archive hand-over
+        if: ${{ inputs.preflight_only }}
+        working-directory: termux-packages
+        shell: bash
+        run: |
+          # Same commands as the patched end of build-bootstraps.sh, on a 30 MB dummy file.
+          ./scripts/run-docker.sh bash -c '
+            head -c 30000000 /dev/zero > /tmp/bootstrap-aarch64.zip
+            mkdir -p /home/builder/rescue /home/builder/termux-packages/output
+            cp -f /tmp/bootstrap-aarch64.zip /home/builder/rescue/
+            if mv -f /tmp/bootstrap-aarch64.zip /home/builder/termux-packages/output/; then echo SIM_MV_OK; else echo SIM_MV_FAILED; fi
+          ' 2>&1 | tee -a preflight.log
+
+      - name: Upload the preflight log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preflight
+          path: termux-packages/preflight.log
+          if-no-files-found: warn
 
       - name: Build bootstrap
         if: ${{ !inputs.preflight_only }}
@@ -189,44 +214,46 @@ jobs:
             --add "$EXTRA_PACKAGES" 2>&1 | tee build.log
 
       - name: Collect the archive (output/ or the copy inside the container)
-        if: ${{ always() && !inputs.preflight_only }}
+        if: always()
         working-directory: termux-packages
         shell: bash
         run: |
           shopt -s nullglob
-          if ls bootstrap-*.zip >/dev/null 2>&1; then
-            echo "Archive is in the checkout."
+          # Note: with nullglob an unmatched pattern disappears, and a bare "ls" would list the
+          # current directory and succeed. Count matches with an array instead.
+          found=(bootstrap-*.zip)
+          if [ ${#found[@]} -gt 0 ]; then
+            echo "Archive is in the checkout:"
+            ls -lh "${found[@]}"
             exit 0
           fi
           for z in output/bootstrap-*.zip; do
             echo "Found $z in output/"
-            mv -f "$z" . || true
+            mv -f "$z" . || cp -f "$z" . || true
           done
-          if ls bootstrap-*.zip >/dev/null 2>&1; then
-            ls -lh bootstrap-*.zip
+          found=(bootstrap-*.zip)
+          if [ ${#found[@]} -gt 0 ]; then
+            ls -lh "${found[@]}"
             exit 0
           fi
-          echo "No archive in the checkout; looking inside the container."
-          docker ps -a --format '{{.Names}}' || true
+          echo "Nothing in output/. Looking inside the container (it may already be gone)."
+          docker ps -a --format '{{.Names}}  {{.Status}}' || true
           mkdir -p rescued
           docker cp termux-package-builder:/home/builder/rescue/. rescued/ || true
           for z in rescued/bootstrap-*.zip; do
             echo "Recovered $z from the container"
             mv -f "$z" . || true
           done
-          if ls bootstrap-*.zip >/dev/null 2>&1; then
-            ls -lh bootstrap-*.zip
+          found=(bootstrap-*.zip)
+          if [ ${#found[@]} -gt 0 ]; then
+            ls -lh "${found[@]}"
             exit 0
           fi
-          found="$(docker exec termux-package-builder find / -xdev -name 'bootstrap-*.zip' -size +5M 2>/dev/null | head -n 5 || true)"
-          echo "found: $found"
-          for f in $found; do
-            docker cp "termux-package-builder:$f" . || true
-          done
-          ls -lh bootstrap-*.zip || true
+          echo "No archive found anywhere. Directory listing for the log:"
+          ls -la . output || true
 
       - name: Keep the full archive
-        if: ${{ always() && !inputs.preflight_only }}
+        if: always()
         working-directory: termux-packages
         shell: bash
         run: |
@@ -238,16 +265,28 @@ jobs:
           ls -lh bootstrap-*.zip || true
 
       - name: Upload the full archive right away
-        if: ${{ always() && !inputs.preflight_only }}
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: bootstrap-full
-          path: termux-packages/bootstrap-*-full.zip
+          path: |
+            termux-packages/bootstrap-*-full.zip
+            termux-packages/output/bootstrap-*.zip
+          compression-level: 0
+          if-no-files-found: warn
+
+      - name: Upload the .deb packages
+        if: ${{ always() && !inputs.preflight_only }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: debs
+          path: termux-packages/output/*.deb
           compression-level: 0
           if-no-files-found: warn
 
       - name: Fail if there is no archive
-        if: ${{ always() && !inputs.preflight_only }}
+        if: always()
         working-directory: termux-packages
         shell: bash
         run: |
