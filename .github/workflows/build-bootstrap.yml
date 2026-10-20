@@ -6,6 +6,9 @@
 #
 # If something goes wrong after the long build, the "Prune bootstrap" workflow can redo the
 # small part from bootstrap-full in a few minutes, without rebuilding.
+#
+# Tip: run it once with preflight_only = true first. It checks in about 3 minutes that the
+# build container can write its output, so a permission problem does not cost 3.5 hours.
 name: Build bootstrap
 
 on:
@@ -20,6 +23,10 @@ on:
       extra_packages:
         description: Extra packages added to the base bootstrap, comma separated
         default: nodejs,git
+      preflight_only:
+        description: Only run the quick checks (about 3 minutes), skip the long build
+        type: boolean
+        default: false
 
 jobs:
   bootstrap:
@@ -70,6 +77,38 @@ jobs:
           mkdir -p output
           chmod a+rwx output
 
+      - name: Patch build-bootstraps.sh to write the archive into output/
+        working-directory: termux-packages
+        shell: bash
+        run: |
+          # The original script ends with `mv ... "$TERMUX_PACKAGES_DIRECTORY/"`. It does not check
+          # the result and still prints "Finished successfully" when the mv fails, and then the
+          # archive is deleted with its temp dir. Here the archive goes to output/ instead, a copy
+          # is kept inside the container, and a failed mv stops the build with an error.
+          python3 - <<'PY'
+          import re, sys
+          p = "scripts/build-bootstraps.sh"
+          s = open(p).read()
+          pattern = re.compile(
+              r'^[ \t]*mv -f "\$\{BOOTSTRAP_TMPDIR\}/bootstrap-\$\{1\}\.zip" "\$TERMUX_PACKAGES_DIRECTORY/?"[ \t]*$',
+              re.M)
+          if len(pattern.findall(s)) != 1:
+              print("::error::Could not find the final mv line in build-bootstraps.sh. Lines with mv:")
+              for i, line in enumerate(s.splitlines(), 1):
+                  if re.search(r'\bmv\b', line):
+                      print(f"{i}: {line}")
+              sys.exit(1)
+          new = '''mkdir -p /home/builder/rescue "$TERMUX_PACKAGES_DIRECTORY/output"
+          cp -f "${BOOTSTRAP_TMPDIR}/bootstrap-${1}.zip" /home/builder/rescue/
+          if ! mv -f "${BOOTSTRAP_TMPDIR}/bootstrap-${1}.zip" "$TERMUX_PACKAGES_DIRECTORY/output/"; then
+            echo "[!] Could not move the archive into output/. A copy is in /home/builder/rescue" >&2
+            exit 1
+          fi'''.replace("\n          ", "\n")
+          open(p, "w").write(pattern.sub(lambda m: new, s))
+          print("Patched the final mv line.")
+          PY
+          grep -n 'rescue\|output/' scripts/build-bootstraps.sh
+
       - name: Let build-package.sh accept subpackage names
         working-directory: termux-packages
         shell: bash
@@ -107,7 +146,37 @@ jobs:
           WRAPPER
           chmod +x build-package.sh
 
+      - name: Preflight - can the build container write its output?
+        working-directory: termux-packages
+        shell: bash
+        run: |
+          echo "runner: $(id)"
+          ./scripts/run-docker.sh bash -c '
+            id
+            ls -ld /home/builder/termux-packages /home/builder/termux-packages/output
+            echo test > /tmp/pf.txt
+            if mv -f /tmp/pf.txt /home/builder/termux-packages/output/pf.txt; then
+              echo "PREFLIGHT_OUTPUT_OK"; rm -f /home/builder/termux-packages/output/pf.txt
+            else
+              echo "PREFLIGHT_OUTPUT_FAILED"
+            fi
+            if touch /home/builder/termux-packages/pf-root.txt; then
+              echo "PREFLIGHT_ROOT_OK"; rm -f /home/builder/termux-packages/pf-root.txt
+            else
+              echo "PREFLIGHT_ROOT_FAILED (informational)"
+            fi
+            if mkdir -p /home/builder/rescue && touch /home/builder/rescue/pf; then
+              echo "PREFLIGHT_RESCUE_OK"
+            fi
+          ' 2>&1 | tee preflight.log
+          if ! grep -q PREFLIGHT_OUTPUT_OK preflight.log || ! grep -q PREFLIGHT_RESCUE_OK preflight.log; then
+            echo "::error::The build container cannot write where the archive will be saved. See the lines printed above."
+            exit 1
+          fi
+          echo "Preflight passed."
+
       - name: Build bootstrap
+        if: ${{ !inputs.preflight_only }}
         working-directory: termux-packages
         shell: bash
         env:
@@ -119,17 +188,36 @@ jobs:
             --architectures "$ARCHITECTURES" \
             --add "$EXTRA_PACKAGES" 2>&1 | tee build.log
 
-      - name: Rescue the archive if it is still inside the container
-        if: always()
+      - name: Collect the archive (output/ or the copy inside the container)
+        if: ${{ always() && !inputs.preflight_only }}
         working-directory: termux-packages
         shell: bash
         run: |
+          shopt -s nullglob
           if ls bootstrap-*.zip >/dev/null 2>&1; then
             echo "Archive is in the checkout."
             exit 0
           fi
+          for z in output/bootstrap-*.zip; do
+            echo "Found $z in output/"
+            mv -f "$z" . || true
+          done
+          if ls bootstrap-*.zip >/dev/null 2>&1; then
+            ls -lh bootstrap-*.zip
+            exit 0
+          fi
           echo "No archive in the checkout; looking inside the container."
           docker ps -a --format '{{.Names}}' || true
+          mkdir -p rescued
+          docker cp termux-package-builder:/home/builder/rescue/. rescued/ || true
+          for z in rescued/bootstrap-*.zip; do
+            echo "Recovered $z from the container"
+            mv -f "$z" . || true
+          done
+          if ls bootstrap-*.zip >/dev/null 2>&1; then
+            ls -lh bootstrap-*.zip
+            exit 0
+          fi
           found="$(docker exec termux-package-builder find / -xdev -name 'bootstrap-*.zip' -size +5M 2>/dev/null | head -n 5 || true)"
           echo "found: $found"
           for f in $found; do
@@ -138,7 +226,7 @@ jobs:
           ls -lh bootstrap-*.zip || true
 
       - name: Keep the full archive
-        if: always()
+        if: ${{ always() && !inputs.preflight_only }}
         working-directory: termux-packages
         shell: bash
         run: |
@@ -150,7 +238,7 @@ jobs:
           ls -lh bootstrap-*.zip || true
 
       - name: Upload the full archive right away
-        if: always()
+        if: ${{ always() && !inputs.preflight_only }}
         uses: actions/upload-artifact@v4
         with:
           name: bootstrap-full
@@ -158,7 +246,18 @@ jobs:
           compression-level: 0
           if-no-files-found: warn
 
+      - name: Fail if there is no archive
+        if: ${{ always() && !inputs.preflight_only }}
+        working-directory: termux-packages
+        shell: bash
+        run: |
+          if ! ls bootstrap-*-full.zip >/dev/null 2>&1; then
+            echo "::error::The build did not produce a bootstrap archive."
+            exit 1
+          fi
+
       - name: Make the smaller archive
+        if: ${{ !inputs.preflight_only }}
         continue-on-error: true
         working-directory: termux-packages
         shell: bash
@@ -172,7 +271,7 @@ jobs:
           ls -lh bootstrap-*.zip
 
       - name: Look for leftover com.termux paths
-        if: always()
+        if: ${{ always() && !inputs.preflight_only }}
         working-directory: termux-packages
         shell: bash
         run: |
@@ -187,7 +286,7 @@ jobs:
           done
 
       - name: Upload the smaller archive and logs
-        if: always()
+        if: ${{ always() && !inputs.preflight_only }}
         uses: actions/upload-artifact@v4
         with:
           name: bootstrap
