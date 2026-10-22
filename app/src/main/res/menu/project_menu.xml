@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/action_save"
+        android:icon="@drawable/ic_save"
+        android:title="@string/save"
+        app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/action_undo"
+        android:icon="@drawable/ic_undo"
+        android:title="@string/undo"
+        app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/action_redo"
+        android:icon="@drawable/ic_redo"
+        android:title="@string/redo"
+        app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/action_word_wrap"
+        android:checkable="true"
+        android:title="@string/word_wrap"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_close_tab"
+        android:title="@string/close_tab"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_new_file"
+        android:title="@string/new_file"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_new_folder"
+        android:title="@string/new_folder"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_open_terminal"
+        android:title="@string/open_terminal_here"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_refresh"
+        android:title="@string/refresh"
+        app:showAsAction="never" />
+</menu>

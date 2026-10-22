@@ -18,4 +18,12 @@ android {
 
 dependencies {
     implementation(project(":core"))
+
+    implementation(libs.androidx.room.runtime)
+    annotationProcessor(libs.androidx.room.compiler)
+
+    // LiveData is part of this module's public API (the project list).
+    api(libs.androidx.lifecycle.livedata)
+
+    testImplementation(libs.junit)
 }

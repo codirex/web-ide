@@ -31,6 +31,33 @@ Feature modules never depend on each other, except `:lsp` on `:editor`. `:app` c
 - **LSP.** TypeScript 6 with typescript-language-server first; TypeScript 7 later.
 - **UI language.** English only.
 
+## Workspace layout
+
+Projects are folders directly inside `~/projects` (`/data/data/org.codirex.webide/files/home/projects`).
+The folder name is the project name. The database (Room) only remembers creation and last-opened
+times; it is brought in line with the folders every time the home screen opens, so folders created
+in the terminal (for example with `git clone`) appear as projects. Deleting a project deletes its
+folder. Zip export leaves out `node_modules`; zip import removes a single wrapping top-level folder.
+
+## Project screen
+
+- **Drawer** (menu button, top left): a navigation rail with *Files* (shows the tree), *Terminal*
+  (opens a terminal in the selected folder) and *Close* (back to the project list), next to the file
+  tree. A tap on a folder opens or closes it and makes it the target for new files and folders; a
+  long press shows the actions for that item.
+- **Bottom sheet**: *Build* (runs a shell command in the project folder and shows the output),
+  *Live view* (WebView for a dev server on this phone, default http://127.0.0.1:5173) and *Problems*
+  (filled by the language servers later).
+- `FileTree` (module `:workspace`, pure Java) is the model of the tree: open folders and the
+  flattened rows. It is used from one background thread only.
+
+## Editor
+
+`:editor` wraps Sora Editor. `EditorFileView` is one open file (a `CodeEditor` plus its unsaved state);
+`TextFile` reads and writes UTF-8 text safely; `FileTypes` maps file names to TextMate scopes using the
+table shipped with the grammar assets; `TextMateSetup` loads grammars and themes once. In the app,
+`EditorTabs` manages the tabs, saving and reloading, so `ProjectActivity` only reacts to its state.
+
 ## Open risks
 
 - The minimum targetSdk Android accepts for installs is 24 on Android 15 and 16; Android 17 is unconfirmed.

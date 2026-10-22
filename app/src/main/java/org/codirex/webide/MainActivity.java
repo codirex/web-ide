@@ -1,5 +1,6 @@
 package org.codirex.webide;
 
+import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.net.Uri;
 import android.os.Build;
@@ -63,6 +64,8 @@ public class MainActivity extends AppCompatActivity {
         binding.installFromFile.setOnClickListener(v -> pickBootstrap.launch(new String[]{"*/*"}));
         binding.removeRuntime.setOnClickListener(v -> removeRuntime());
         binding.runCommand.setOnClickListener(v -> runCommand());
+        binding.openTerminal.setOnClickListener(
+                v -> startActivity(new Intent(this, TerminalActivity.class)));
 
         final String bundled = bundledBootstrapAsset();
         if (bundled != null) {

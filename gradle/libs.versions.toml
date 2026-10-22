@@ -5,6 +5,14 @@ androidx-core = "1.17.0"
 androidx-appcompat = "1.7.1"
 androidx-activity = "1.10.1"
 junit = "4.13.2"
+androidx-room = "2.8.5"
+androidx-lifecycle = "2.9.0"
+androidx-recyclerview = "1.4.0"
+androidx-drawerlayout = "1.2.0"
+androidx-coordinatorlayout = "1.2.0"
+termux = "0.118.0"
+sora = "0.24.4"
+gson = "2.11.0"
 
 [libraries]
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
@@ -12,6 +20,17 @@ androidx-core = { group = "androidx.core", name = "core", version.ref = "android
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "androidx-appcompat" }
 androidx-activity = { group = "androidx.activity", name = "activity", version.ref = "androidx-activity" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "androidx-room" }
+androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "androidx-room" }
+androidx-lifecycle-livedata = { group = "androidx.lifecycle", name = "lifecycle-livedata", version.ref = "androidx-lifecycle" }
+androidx-recyclerview = { group = "androidx.recyclerview", name = "recyclerview", version.ref = "androidx-recyclerview" }
+androidx-drawerlayout = { group = "androidx.drawerlayout", name = "drawerlayout", version.ref = "androidx-drawerlayout" }
+androidx-coordinatorlayout = { group = "androidx.coordinatorlayout", name = "coordinatorlayout", version.ref = "androidx-coordinatorlayout" }
+sora-editor = { group = "io.github.rosemoe", name = "editor", version.ref = "sora" }
+sora-language-textmate = { group = "io.github.rosemoe", name = "language-textmate", version.ref = "sora" }
+sora-oniguruma-native = { group = "io.github.rosemoe", name = "oniguruma-native", version.ref = "sora" }
+gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
+termux-terminal-view = { group = "com.termux.termux-app", name = "terminal-view", version.ref = "termux" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -19,4 +19,9 @@ android {
 dependencies {
     implementation(project(":core"))
     implementation(project(":runtime"))
+
+    // Exposes TerminalView and (through it) TerminalSession to the modules that show a terminal.
+    api(libs.termux.terminal.view)
+
+    testImplementation(libs.junit)
 }

@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
+    id("org.codirex.trace") version "1.0.0"
 }
 
 android {
@@ -61,4 +62,7 @@ dependencies {
     implementation(libs.androidx.core)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.activity)
+    implementation(libs.androidx.recyclerview)
+    implementation(libs.androidx.drawerlayout)
+    implementation(libs.androidx.coordinatorlayout)
 }

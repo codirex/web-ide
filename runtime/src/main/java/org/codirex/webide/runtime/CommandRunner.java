@@ -1,5 +1,6 @@
 package org.codirex.webide.runtime;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -62,7 +63,15 @@ public final class CommandRunner {
         if (!environment.isInstalled()) {
             return new Result(-1, "", false, false, "The runtime is not installed.");
         }
-        return run(new String[]{environment.shell().getAbsolutePath(), "-c", command}, timeoutSeconds);
+        return run(new String[]{environment.shell().getAbsolutePath(), "-c", command}, null, timeoutSeconds);
+    }
+
+    /** Same as {@link #runShell(String, long)}, but starts in {@code workingDir} (the home folder if null). */
+    public Result runShell(String command, File workingDir, long timeoutSeconds) {
+        if (!environment.isInstalled()) {
+            return new Result(-1, "", false, false, "The runtime is not installed.");
+        }
+        return run(new String[]{environment.shell().getAbsolutePath(), "-c", command}, workingDir, timeoutSeconds);
     }
 
     /**
@@ -73,15 +82,15 @@ public final class CommandRunner {
         if (!environment.isInstalled() || !environment.bash().exists()) {
             return new Result(-1, "", false, false, "The runtime is not installed.");
         }
-        return run(new String[]{environment.bash().getAbsolutePath(), "-l", "-c", command}, timeoutSeconds);
+        return run(new String[]{environment.bash().getAbsolutePath(), "-l", "-c", command}, null, timeoutSeconds);
     }
 
-    private Result run(String[] commandLine, long timeoutSeconds) {
+    private Result run(String[] commandLine, File workingDir, long timeoutSeconds) {
         final StringBuilder output = new StringBuilder();
         final boolean[] truncated = {false};
         try {
             ProcessBuilder builder = new ProcessBuilder(commandLine);
-            builder.directory(paths.home);
+            builder.directory(workingDir != null ? workingDir : paths.home);
             builder.environment().clear();
             builder.environment().putAll(environment.build());
             builder.redirectErrorStream(true);

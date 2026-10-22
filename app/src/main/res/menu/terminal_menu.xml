@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/action_new_session"
+        android:title="@string/terminal_new_session"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_close_session"
+        android:title="@string/terminal_close_session"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_paste"
+        android:title="@string/terminal_paste"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_font_larger"
+        android:title="@string/terminal_font_larger"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_font_smaller"
+        android:title="@string/terminal_font_smaller"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_exit_all"
+        android:title="@string/terminal_exit_all"
+        app:showAsAction="never" />
+</menu>

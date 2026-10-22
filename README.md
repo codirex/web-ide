@@ -18,8 +18,8 @@ and local preview, all on the device.
 
 ## Status
 
-Phase 1: runtime. The app can install a bootstrap archive (shell, Node.js, npm, Git) into its
-private storage and run shell commands with it. See `docs/BOOTSTRAP.md` for how to build and
-install the archive.
+Phase 4: editor. Files open in tabs with syntax highlighting (Sora Editor and TextMate grammars), saving,
+undo and redo. See `docs/EDITOR.md` for how to install the highlighting assets. Earlier phases: runtime and
+terminal (`docs/BOOTSTRAP.md`), projects and the project screen (drawer with file tree, bottom sheet).
 
 See `docs/ARCHITECTURE.md` for modules and decisions.

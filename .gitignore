@@ -16,3 +16,6 @@
 # Bootstrap archives are built by CI and not committed
 /app/src/main/assets/bootstrap/*.zip
 /bootstrap-*.zip
+
+/*/build
+.cg

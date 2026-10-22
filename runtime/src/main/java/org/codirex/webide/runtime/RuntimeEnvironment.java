@@ -43,6 +43,7 @@ public final class RuntimeEnvironment {
         env.put("HOME", paths.home.getAbsolutePath());
         env.put("PREFIX", paths.prefix.getAbsolutePath());
         env.put("PATH", paths.bin.getAbsolutePath() + ":/system/bin");
+        env.put("SHELL", bash().getAbsolutePath());
         env.put("TMPDIR", paths.tmp.getAbsolutePath());
         env.put("LANG", "en_US.UTF-8");
         env.put("TERM", "xterm-256color");
@@ -65,5 +66,16 @@ public final class RuntimeEnvironment {
             }
         }
         return env;
+    }
+
+    /** The same variables as {@link #build()}, as {@code NAME=value} strings for native code. */
+    public String[] buildArray() {
+        Map<String, String> env = build();
+        String[] result = new String[env.size()];
+        int i = 0;
+        for (Map.Entry<String, String> entry : env.entrySet()) {
+            result[i++] = entry.getKey() + "=" + entry.getValue();
+        }
+        return result;
     }
 }

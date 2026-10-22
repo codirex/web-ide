@@ -1,0 +1,56 @@
+# Builds the syntax highlighting assets of the editor (TextMate grammars and themes) from the npm
+# packages tm-grammars and tm-themes. Download the artifact "textmate-assets", unzip it, and copy
+# the folder "textmate" into app/src/main/assets/ of the project.
+name: Build editor assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      light_theme:
+        description: Light theme id from tm-themes
+        default: github-light
+      dark_theme:
+        description: Dark theme id from tm-themes
+        default: github-dark
+
+jobs:
+  assets:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out this project
+        uses: actions/checkout@v4
+
+      - name: Download the npm packages
+        shell: bash
+        run: |
+          mkdir -p dl && cd dl
+          npm pack tm-grammars tm-themes --silent
+          ls -lh
+          mkdir tm-grammars tm-themes
+          tar -xzf tm-grammars-*.tgz -C tm-grammars
+          tar -xzf tm-themes-*.tgz -C tm-themes
+          ls tm-grammars/package | head
+          ls tm-grammars/package/grammars | wc -l
+          ls tm-themes/package/themes | wc -l
+
+      - name: Generate the assets
+        shell: bash
+        env:
+          LIGHT: ${{ inputs.light_theme }}
+          DARK: ${{ inputs.dark_theme }}
+        run: |
+          python3 tools/build_textmate_assets.py \
+            --grammars dl/tm-grammars/package/grammars \
+            --themes dl/tm-themes/package/themes \
+            --configs tools/textmate-config \
+            --notices dl/tm-grammars/package --notices dl/tm-themes/package \
+            --light "$LIGHT" --dark "$DARK" \
+            --out out/textmate
+          du -sh out/textmate
+          ls out/textmate
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: textmate-assets
+          path: out
